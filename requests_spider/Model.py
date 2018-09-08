@@ -4,7 +4,6 @@ import re
 from lxml.etree import ParserError
 from requests_spider.Asker import Response
 from requests_spider.Logger import logger
-from pprint import pformat
 
 
 class Field(object):
@@ -47,7 +46,7 @@ class CField(Field):
             element = response.html.find(self.rule, first=self.first)
             if element:
                 element = self.parse_item(element) if self.first else [self.parse_item(e) for e in element]
-        logger.info('rule: {} and element: {}'.format(self.rule, element))
+        # logger.info('rule: {} and element: {}'.format(self.rule, element))
         return element or self.default
 
 
@@ -63,7 +62,7 @@ class XField(Field):
                     element = self.parse_item(element) if self.first else [self.parse_item(e) for e in element]
         except (ParserError, UnicodeDecodeError):
             element = self.default
-        logger.info('rule: {} and element: {}'.format(self.rule, element))
+        # logger.info('rule: {} and element: {}'.format(self.rule, element))
         return element or self.default
 
 
@@ -79,7 +78,7 @@ class RField(Field):
                     element = element[0] if element and self.first else element
         except (ParserError, UnicodeDecodeError):
             element = self.default
-        logger.info('rule: {} and element: {}'.format(self.rule, element))
+        # logger.info('rule: {} and element: {}'.format(self.rule, element))
         return element or self.default
 
 
@@ -132,7 +131,7 @@ class Model(metaclass=ModelMeta):
         return self._values.items()
 
     def json(self):
-        return pformat(dict(self._values))
+        return dict(self._values)
 
     def dumps(self):
         return json.dumps(self.json(), ensure_ascii=False)

@@ -1,4 +1,3 @@
-import re
 from requests_spider import Spider, Model, Request, XRequest,Response, CField, XField, Field, RField, asyncio
 from fontTools import BytesIO
 from fontTools.ttLib import TTFont
@@ -12,12 +11,12 @@ num_dict = {"six": "6", "three": "3", "period": ".", "eight": "8", "zero": "0",
 
 
 async def get_nums(font_type, font_str):
-    print(font_str.encode('unicode-escape'))
+    # print(font_str.encode('unicode-escape'))
     response = await snake.get(url=font_url.format(font_type))
     font = response.content
     ttfont = TTFont(BytesIO(font))
     mappings = {hex(k)[2:]: num_dict.get(v) for k, v in ttfont.getBestCmap().items()}
-    print(mappings)
+    # print(mappings)
     items = font_str.encode('unicode-escape').split(b'\\U000')[1:]
     return "".join([mappings.get(item.decode('utf8')) for item in items])
 
@@ -32,7 +31,7 @@ class BookScore(Model):
         self['score'] = data['rate']
         self['count'] = data['userCount']
         self['id'] = response.current_request.meta.get('bookid')
-        print(response.current_request.meta)
+        # print(response.current_request.meta)
         with open('qidian2.txt', 'a+') as f:
             f.write(self.dumps() + '\n')
 
@@ -82,8 +81,6 @@ async def sleep(request):
     # await asyncio.sleep(5)
     return request
 
-
-snake.async_limit = 15
 
 if __name__ == '__main__':
     snake.run()

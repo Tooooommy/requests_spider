@@ -9,13 +9,15 @@ from urllib.parse import urlparse
 from requests_spider.Asker import Request, Response
 from requests_spider.Logger import logger
 from requests_spider.Model import Model
+from requests_spider.Queue import Squeue
 from inspect import isasyncgen, isawaitable
 from requests_html import HTMLSession
 
-try:
-    import uvloop
 
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+try:
+    import uvloop as uv
+
+    asyncio.set_event_loop_policy(uv.EventLoopPolicy())
 except ImportError:
     pass
 
@@ -28,7 +30,7 @@ except AssertionError:
 _Response = Response
 _Request = Request
 _Model = Model
-_Queue = asyncio.Queue
+_Queue = Squeue
 _Set = set
 
 
@@ -45,18 +47,20 @@ class Spider(HTMLSession):
 
         self.async_limit = 5
         self.queue_timeout = 5
+        self.request_count = 0
 
-        self._middleware_funcs = {}  # 下载器之后
+        self._init_requests_funcs = []
+        self._rule_requests_funcs = []
+        self._middleware_funcs = {}
         self._queue = _Queue()
-
-        self._done_urls = _Set()  # 访问过url
+        self._visited_url = _Set()
 
         self.semaphore = asyncio.Semaphore(self.async_limit)
         self.loop = loop or asyncio.get_event_loop()
         self.thread_pool = ThreadPoolExecutor(max_workers=workers)
 
     """
-    基本设置
+    basic settings
     """
 
     # 初始化请求
@@ -67,17 +71,24 @@ class Spider(HTMLSession):
     @init_requests.setter
     def init_requests(self, requests):
         if isinstance(requests, list):
+            for request in requests:
+                if isinstance(request, _Request):
+                    self._init_requests.append(request)
+        elif isinstance(requests, _Request):
             self._init_requests.append(requests)
         else:
-            raise TypeError('start_requests: {} is list but not {} '.format(requests, type(requests)))
+            raise TypeError('start_requests: {} is list or Request but not {} '.format(requests, type(requests)))
 
-    # 初始化域名
     @property
     def domains(self):
         return self._domains
 
     @domains.setter
     def domains(self, domains):
+        """
+        set domains
+        _domains = [] if domains is None
+        """
         if isinstance(domains, list):
             for domain in domains:
                 domain = self._make_domain(domain)
@@ -91,35 +102,36 @@ class Spider(HTMLSession):
     @staticmethod
     def _make_domain(domain):
         """
-        修正domain
+        complete domain
         """
         if domain.startswith('www.'):
             domain = domain[4:]
         return domain
 
-    # 获取下次请求的规则
     @property
     def rules(self):
         return self._rules
 
     @rules.setter
     def rules(self, rules):
+        """
+        next request rule
+        """
         for rule in rules:
             if isinstance(rule, _Request):
                 self._rules.append(rule)
 
-    # 判断是否运行
     @property
     def is_running(self):
         """
-        判断队列是否为空，程序是否运行
+        queue is not empty and program is running
         """
         if self._queue.empty():
             return False
         return True
 
     """
-    session请求方法
+    request from Request and async request
     """
 
     def request(self, *args, **kwargs):
@@ -128,92 +140,85 @@ class Spider(HTMLSession):
 
     async def from_request(self, req):
         try:
+            self.request_count += 1
             resp = await self.request(url=req.url, method=req.method, **req.info)
             return _Response.from_response(req, resp, self)
         except (TimeoutError, ConnectionError) as e:
-            logger.info(e)
+            logger.info('Request: {} and Error: {}'.format(req, e))
 
     """
-    队列操作
+    operate queue 
     """
 
-    async def put_item(self, item):
-        """
-        入队判断
-        """
+    async def put_item(self, item: _Request):
         if isinstance(item, _Request):
             if item.not_filter:
-                self._queue.put_nowait(item)
-            elif not self.filter(item):
-                self._queue.put_nowait(item)
-        elif isinstance(item, _Response):
-            self._queue.put_nowait(item)
+                self._queue.dumps_nowait(item)
+            elif not self.filter_request(item):
+                self._queue.dumps_nowait(item)
         else:
-            # logger.info('put item: {}'.format(item))
-            pass
+            logger.info('put item: {}'.format(item))
 
     async def get_item(self):
-        """
-        出队
-        """
-        return await self._queue.get()
+        return await self._queue.loads()
 
     """
-    过滤请求
+    filter request
     """
 
     @staticmethod
-    def encode_filter(req):
+    def encode_request(req: _Request):
         """
-        编码url
+        encode request
         """
-        e_url = json.dumps({req.method: req.url, 'meta_filter': req.meta_filter}).encode('utf8')
+
+        e_url = json.dumps({req.method: req.url, 'form_filter': req.form_filter}).encode('utf8')
         return hashlib.md5(e_url).hexdigest()
 
-    def add_filter(self, req):
+    def add_request(self, req: _Request):
         """
-        添加url
+        add request
         """
-        e_url = self.encode_filter(req)
-        self._done_urls.add(e_url)
 
-    def filter_url(self, req):
-        """
-        过滤url
-        """
-        e_url = self.encode_filter(req)
-        if e_url in self._done_urls:
-            return True
+        e_url = self.encode_request(req)
+        self._visited_url.add(e_url)
 
-        return False
+    def filter_request(self, req: _Request):
+        """
+        filter request
+        """
 
-    def filter_domains(self, req):
-        """
-        过滤域名
-        """
+        e_url = self.encode_request(req)
         netloc = urlparse(req.url).netloc
-        if len(self._domains) > 0 and not any([netloc.endswith(domain) for domain in self._domains]):
+        if e_url in self._visited_url:
             return True
-
-        return False
-
-    def filter(self, req):
-        """
-
-        """
-        if self.filter_url(req):
-            return True
-        elif self.filter_domains(req):
+        elif len(self._domains) > 0 and not any([netloc.endswith(domain) for domain in self._domains]):
             return True
         return False
 
     """
-    中间组件
+    Component
     """
+
+    def Init(self, func):
+        """
+        init request func
+        """
+
+        self._init_requests_funcs.append(func)
+        return func
+
+    def Rule(self, func):
+        """
+        rule request func
+        """
+
+        self._rule_requests_funcs.append(func)
+        return func
 
     def _add_middleware(self, func, option='request'):
         """
-        添加中间函数
+        add middleware func
         """
         if option == 'request':
             self._middleware_funcs.setdefault(option, []).append(func)
@@ -224,146 +229,155 @@ class Spider(HTMLSession):
     def Middleware(self, option):
         """
         option type: request/response/record
-        request
-        response
-        record
+        @spider.Middleware
         """
         if callable(option):
             return self._add_middleware(func=option)
         else:
             return partial(self._add_middleware, option=option)
 
-    async def _run_middleware(self, item, name):
+    def _run_middleware(self, item, name):
         """
         run middleware
         """
         for middleware in self._middleware_funcs.get(name):
-            item = await middleware(item)
+            item = middleware(item)
         return item
 
-    async def middleware(self, item):
+    async def async_put_item(self, result):
         """
-        middleware: processing the acquired item for Middleware
-        item type: request/response
-        """
-        logger.info('启动中间件')
-        if isinstance(item, _Request):
-            if self._middleware_funcs.get('request'):
-                item = await self._run_middleware(item, 'request')
-
-        if isinstance(item, _Response):
-            if self._middleware_funcs.get('response'):
-                item = await self._run_middleware(item, 'response')
-
-        await self.put_item(item)
-        logger.info('结束中间件')
-
-    async def async_put_middleware(self, result):
-        """
-        异步添加结果到队列中
-        判断是否问异步生成器/可挂起/一般
+        async put item
+        async generator/generator/list/item
         """
         if isasyncgen(result):
             async for item in result:
-                await self.middleware(item)
+                await self.put_item(item)
         elif isawaitable(result):
-            await self.middleware(await result)
+            await self.put_item(await result)
         elif isinstance(result, list):
             for item in result:
-                await self.middleware(item)
+                await self.put_item(item)
         else:
-            await self.middleware(result)
+            await self.put_item(result)
 
     """
-    主操作
+    main
     """
 
-    # 初始化
     async def init(self):
         """
         Request initialization:  getting initialization requests from Middleware
         """
-        for request in self._init_requests:
-            logger.info('初始化请求： {}'.format(request))
-            await self.async_put_middleware(request)
+        for requests_func in self._init_requests_funcs:
+            result = requests_func()
+            await self.async_put_item(result)
+        await self.async_put_item(self._init_requests)
 
-    # 分发器
-    async def dispatcher(self):
+    async def rule(self):
         """
-        分发器：从队列中获取item，进行进行判别分发到下载器、记录器、解析器
+        get rule from rule_funcs
+        add rule into _rules
         """
-        logger.info('启动分发器')
+        for rule_func in self._rule_requests_funcs:
+            result = rule_func()
+            if isasyncgen(result):
+                async for rule in result:
+                    self._rules.append(rule)
+            elif isawaitable(result):
+                rule = await result
+                self._rules.append(rule)
+            elif isinstance(result, _Request):
+                self._rules.append(result)
+            else:
+                logger.info('rule: {}'.format(result))
+
+    async def dispather(self):
+        """
+        dispather: get request from queue and put into downloader
+        """
         with await self.semaphore:
             while self.is_running:
                 try:
                     item = await asyncio.wait_for(self.get_item(), self.queue_timeout)
                     if isinstance(item, _Request):
-                        await self.downloader(item)
-                    elif isinstance(item, _Response):
-                        await self.parser(item)
+                        resp = await self.downloader(item)
+                        if isinstance(resp, _Response):
+                            await self.parser(resp)
                 except asyncio.TimeoutError:
                     pass
-        logger.info('结束分发器')
 
-    # 下载器
-    async def downloader(self, req):
+    async def downloader(self, request: _Request):
         """
-        下载器：从分发器中获取请求信息，然后进行请求， 获得response响应信息并入对
+        downloader： requests -> request_middleware_func -> downloader -> response_middleware_func -> return
         """
-        logger.info('启动下载器')
-        logger.info('request: {}'.format(req))
-        resp = await self.from_request(req)
-        logger.info('response: {}'.format(resp))
-        self.add_filter(req)
-        await self.async_put_middleware(resp)
-        logger.info('结束下载器')
 
-    # 解析器
-    async def parser(self, resp):
+        logger.info('run downloader')
+        logger.info('request: {}'.format(request))
+
+        self.add_request(request)
+
+        if self._middleware_funcs.get('request'):
+            request = await self._run_middleware(request, 'request')
+
+        response = await self.from_request(request)
+
+        if self._middleware_funcs.get('response'):
+            response = await self._run_middleware(response, 'response')
+
+        logger.info('response: {}'.format(response))
+        logger.info('end downloader')
+
+        return response
+
+    async def parser(self, response: _Response):
         """
-        解析器： 从分发器中获取response, 处理rule,record
+        parser： parse response and get request or process model data
         """
-        logger.info('启动解析器')
-        logger.info('response: {}'.format(resp, resp.url))
+        logger.info('run parser')
+        logger.info('response: {}'.format(response))
         if len(self._rules) > 0:
             for rule in self._rules:
-                result = rule.search(resp)
-                await self.async_put_middleware(result)
+                result = rule.search(response)
+                if result:
+                    await self.async_put_item(result)
 
-        # print('condition: {}'.format(isinstance(record, _Record) and hasattr(record, 'process')))
-        model = getattr(resp.current_request, 'model', None)
-        print(resp.current_request)
+        model = getattr(response.current_request, 'model', None)
         if model:
-            record = model if isinstance(model, _Model) else model()
-            record.load(resp)
-            result = record.process(resp)
-            await self.async_put_middleware(result)
-        logger.info('结束解析器')
+            model = model()
+            if isinstance(model, _Model):
+                model.load(response)
+                model = model.process(response)
+            await self.async_put_item(model)
+
+        logger.info('end parser')
 
     def run(self):
         """
-        处理器：开启事务,初始化程序,运行分发器
+        process: main program
         """
-        logger.info('开启爬虫程序')
+        logger.info('START SPIDER')
         start_time = datetime.now()
         try:
-            logger.info('初始化爬虫程序')
+            logger.info('run init_spider')
             self.loop.run_until_complete(self.init())
-            logger.info('完成爬虫程序初始化')
-            dispatcher = self.dispatcher()
-            logger.info('开启爬虫主程序')
-            self.loop.run_until_complete(dispatcher)
-            logger.info('结束爬虫主程序')
+            self.loop.run_until_complete(self.rule())
+            logger.info('end init_spider')
+
+            logger.info('run main_spider')
+            tasks = asyncio.wait(
+                [self.dispather() for _ in range(self.async_limit)])
+            self.loop.run_until_complete(tasks)
+            logger.info('end main_spider')
 
         except KeyboardInterrupt:
-            logger.info('手动取消爬虫程序任务')
+            logger.info('keyboard cancel all tasks')
             for task in asyncio.Task.all_tasks():
                 task.cancel()
             self.loop.run_forever()
         finally:
             self.close()
             self.loop.close()
-            logger.info('关闭爬虫请求会话')
-            logger.info('结束事件循环')
-            logger.info('结束爬虫程序')
-            logger.info('爬虫程序耗费时间： {}'.format(datetime.now() - start_time))
+            logger.info('Request Count: {}'.format(self.request_count))
+            logger.info('Time Usage： {}'.format(datetime.now() - start_time))
+            logger.info('CLOSE SPIDER')
+

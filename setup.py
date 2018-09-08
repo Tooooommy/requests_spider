@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="requests_spider",
-    version="0.0.1",
+    version="0.0.4",
     description="Web crawling framework like flask.",
     author="Tommy",
     long_description=open('README.md').read(),
@@ -17,7 +17,7 @@ setup(
         'Programming Language :: Python :: Implementation :: PyPy'
     ],
     install_requires=[
-        'requests-html'
+        'requests-html', 'uvloop'
     ],
     license='MIT',
     packages=find_packages(),

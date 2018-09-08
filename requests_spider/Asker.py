@@ -6,9 +6,9 @@ from requests_html import HTMLResponse
 from urllib.parse import urlparse, urlunparse, urljoin
 
 try:
-    import uvloop
+    import uvloop as up
 
-    asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    asyncio.set_event_loop_policy(up.EventLoopPolicy())
 except ImportError:
     pass
 
@@ -52,10 +52,13 @@ class Response(HTMLResponse):
 
     __repr__ = __str__
 
+    def __hash__(self):
+        super(Response, self).__hash__()
+
 
 class Request(object):
     def __init__(self, url, *, method=METHOD_GET, model=None, meta=None,
-                 not_filter=False, meta_filter=None, **kwargs):
+                 not_filter=False, form_filter=None, **kwargs):
         """
         包装一下下次请求的一些信息
         :param url:类似百度等网址，格式：https://www.baidu.com
@@ -72,7 +75,7 @@ class Request(object):
         self.info = kwargs or {}
         self.model = model
         self.not_filter = not_filter
-        self.meta_filter = meta_filter
+        self.form_filter = form_filter
         self.meta = dict(meta) if meta else {}
 
     def __str__(self):
@@ -93,7 +96,7 @@ class Request(object):
 
     def copy(self, url):
         return Request(url, method=self.method, model=self.model, meta=self.meta,
-                       meta_filter=self.meta_filter, not_filter=self.not_filter, **self.info)
+                       form_filter=self.form_filter, not_filter=self.not_filter, **self.info)
 
     def make_next(self, links, resp):
         return [self.copy(mk_link(link, resp.url)) for link in links]
