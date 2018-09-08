@@ -241,7 +241,10 @@ class Spider(HTMLSession):
         run middleware
         """
         for middleware in self._middleware_funcs.get(name):
-            item = middleware(item)
+            if isinstance(item, _Request) or isinstance(item, _Response):
+                item = middleware(item)
+            else:
+                return None
         return item
 
     async def async_put_item(self, result):
@@ -306,28 +309,27 @@ class Spider(HTMLSession):
                 except asyncio.TimeoutError:
                     pass
 
-    async def downloader(self, request: _Request):
+    async def downloader(self, item: _Request):
         """
         downloader： requests -> request_middleware_func -> downloader -> response_middleware_func -> return
         """
 
         logger.info('run downloader')
-        logger.info('request: {}'.format(request))
+        logger.info('request: {}'.format(item))
 
-        self.add_request(request)
-
+        self.add_request(item)
         if self._middleware_funcs.get('request'):
-            request = await self._run_middleware(request, 'request')
+            item = await self._run_middleware(item, 'request')
+        if item:
+            if isinstance(item, _Request):
+                item = await self.from_request(item)
+            if self._middleware_funcs.get('response'):
+                item = await self._run_middleware(item, 'response')
 
-        response = await self.from_request(request)
-
-        if self._middleware_funcs.get('response'):
-            response = await self._run_middleware(response, 'response')
-
-        logger.info('response: {}'.format(response))
+        logger.info('response: {}'.format(item))
         logger.info('end downloader')
 
-        return response
+        return item
 
     async def parser(self, response: _Response):
         """
