@@ -13,7 +13,6 @@ from requests_spider.Queue import Squeue
 from inspect import isasyncgen, isawaitable
 from requests_html import HTMLSession
 
-
 try:
     import uvloop as uv
 
@@ -382,4 +381,3 @@ class Spider(HTMLSession):
             logger.info('Request Count: {}'.format(self.request_count))
             logger.info('Time Usage： {}'.format(datetime.now() - start_time))
             logger.info('CLOSE SPIDER')
-

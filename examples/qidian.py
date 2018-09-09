@@ -1,4 +1,4 @@
-from requests_spider import Spider, Model, Request, XRequest,Response, CField, XField, Field, RField, asyncio
+from requests_spider import Spider, Model, Request, XRule,Response, CField, XField, Field, RField, asyncio
 from fontTools import BytesIO
 from fontTools.ttLib import TTFont
 
@@ -65,14 +65,14 @@ class BookInfo(Model):
                       model=BookScore, meta={'bookid': self['id']})
 
 
-snake = Spider(name='one')
+snake = Spider(name='one', workers=4)
 snake.domains = ['www.qidian.com']
 snake.init_requests = [
     Request(rank_url.format(1, page)) for page in range(1, 2)
 ]
 
 snake.rules = [
-    XRequest('//div[@class="book-img-box"]/a/@href', model=BookInfo)
+    XRule(rule='//div[@class="book-img-box"]/a/@href', model=BookInfo)
 ]
 
 

@@ -17,7 +17,7 @@ setup(
         'Programming Language :: Python :: Implementation :: PyPy'
     ],
     install_requires=[
-        'requests-html', 'uvloop'
+        'requests-html'
     ],
     license='MIT',
     packages=find_packages(),

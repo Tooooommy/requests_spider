@@ -1,7 +1,6 @@
 import random
 import re
-from aiohttp import RequestInfo, ClientResponse, ClientSession, ClientRequest
-from requests_spider import Spider, Request, XRequest, Model, XField, RField, Response, Field, asyncio
+from requests_spider import Spider, Request, XRule, Model, RField, Response, Field, asyncio
 
 # 获取某个用户的所有的视频信息 ===> 获取aid / page
 videos_url = "https://space.bilibili.com/ajax/member/getSubmitVideos?mid={mid}" \

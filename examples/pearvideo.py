@@ -1,7 +1,7 @@
 import json
 
 from requests_html import HTMLResponse
-from requests_spider import Spider, RField, XField, Model, Request, XRequest, Field, Response, RRequest
+from requests_spider import Spider, RField, XField, Model, Request, XRule, Field, Response, RRule
 
 
 class VideoInfo(Model):
@@ -38,8 +38,8 @@ snake.init_requests = [
 ]
 
 snake.rules = [
-    XRequest(url='//a[contains(@class, "popularembd")]/@href'),
-    RRequest(url='(http://.*?\.mp4)', model=Video)
+    XRule(rule='//a[contains(@class, "popularembd")]/@href'),
+    RRule(rule='(http://.*?\.mp4)', model=Video)
 ]
 
 
