@@ -37,7 +37,7 @@ if __name__ == '__main__':
             print(response)
 
 
-    r = Request(url='https://www.baidu.com', model=m)
+    r = Request(url='https://www.baidu.com', callback=m)
 
     q = Squeue()
     r.__dict__.update({'_love': 11})

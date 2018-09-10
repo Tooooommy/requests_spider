@@ -1,7 +1,7 @@
 import json
 
 from requests_html import HTMLResponse
-from requests_spider import Spider, RField, XField, Model, Request, XRule, Field, Response, RRule
+from requests_spider import Spider, RField, XField, Model, Request, XRule, Response, RRule
 
 
 class VideoInfo(Model):
@@ -34,7 +34,7 @@ class Video(Model):
 snake = Spider('pearvideo')
 snake.init_requests = [
     Request(url='http://www.pearvideo.com/popular_loading.jsp?reqType=1&start={}&sort={}'.
-            format(x, x * 10), model=VideoInfo) for x in range(0, 10)
+            format(x, x * 10), callback=VideoInfo) for x in range(0, 10)
 ]
 
 snake.rules = [

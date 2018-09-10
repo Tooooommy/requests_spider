@@ -2,7 +2,7 @@ from setuptools import find_packages, setup
 
 setup(
     name="requests_spider",
-    version="0.0.4",
+    version="0.0.5",
     description="Web crawling framework like flask.",
     author="Tommy",
     long_description=open('README.md').read(),

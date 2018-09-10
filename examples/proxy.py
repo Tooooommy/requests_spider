@@ -15,7 +15,7 @@ class Proxy(Model):
 snake = Spider('proxy', workers=15)
 snake.domains = ['www.xicidaili.com']
 snake.init_requests = [
-    Request(url='http://www.xicidaili.com/nn/{}'.format(x), model=Proxy) for x in range(1, 10)
+    Request(url='http://www.xicidaili.com/nn/{}'.format(x), callback=Proxy) for x in range(1, 10)
 ]
 
 snake.async_limit = 5

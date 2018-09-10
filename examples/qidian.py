@@ -62,22 +62,23 @@ class BookInfo(Model):
             file.write(self.dumps() + '\n')
             file.flush()
         yield Request(score_url.format(snake.cookies.get('_csrfToken'), self['id']),
-                      model=BookScore, meta={'bookid': self['id']})
+                      callback=BookScore, meta={'bookid': self['id']})
 
 
 snake = Spider(name='one', workers=4)
-snake.domains = ['www.qidian.com']
+snake.domains = ['book.qidian.com', 'www.qidian.com']
 snake.init_requests = [
     Request(rank_url.format(1, page)) for page in range(1, 2)
 ]
 
 snake.rules = [
-    XRule(rule='//div[@class="book-img-box"]/a/@href', model=BookInfo)
+    XRule(rule='//div[@class="book-img-box"]/a/@href', callback=BookInfo)
 ]
 
 
 @snake.Middleware('request')
 async def sleep(request):
+    print(request, request.callback)
     # await asyncio.sleep(5)
     return request
 

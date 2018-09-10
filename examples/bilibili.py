@@ -30,16 +30,16 @@ class AV(Model):
         print(self.json())
         if self['mid'] and self['aid'] and self['urls'] and self['cid']:
             # 推荐视频
-            yield Request(url=recommend_url.format(cid=self['cid'], aid=self['aid']), model=Recommend)
+            yield Request(url=recommend_url.format(cid=self['cid'], aid=self['aid']), callback=Recommend)
 
             # 用户信息
             yield Request(url=user_url, method='POST', data={'csrf': '', 'mid': self['mid']},
-                          model=UserInfo, not_filter=True)
+                          callback=UserInfo, not_filter=True)
 
             # 下载视频
             for order, url in enumerate(self['urls']):
                 yield Request(url=url.replace('http', 'https'),
-                              meta={'name': self['aid'] + '_' + str(order)}, model=Video)
+                              meta={'name': self['aid'] + '_' + str(order)}, callback=Video)
 
 
 class UserInfo(Model):
@@ -68,7 +68,7 @@ class Recommend(Model):
 
     async def process(self, response: Response):
         for data in response.json():
-            yield Request(av_url.format(aid=data[1]), model=AV)
+            yield Request(av_url.format(aid=data[1]), callback=AV)
 
 
 class VideoInfo(Model):
@@ -80,9 +80,9 @@ class VideoInfo(Model):
             pattern = 'mid=(\d+?)&pagesize=30&tid=0&page=(\d+?)&keyword=&order=pubdate'
             patn = re.findall(pattern, response.url)[0]
             print(patn)
-            yield Request(url=videos_url.format(mid=patn[0], page=int(patn[1]) + 1), model=VideoInfo),
+            yield Request(url=videos_url.format(mid=patn[0], page=int(patn[1]) + 1), callback=VideoInfo),
             for v in data['vlist']:
-                yield Request(url=av_url.format(aid=v.get('aid')), model=AV)
+                yield Request(url=av_url.format(aid=v.get('aid')), callback=AV)
 
 
 class Video(Model):
@@ -99,7 +99,7 @@ class Video(Model):
 snake = Spider('bilibili', workers=5)
 
 snake.init_requests = [
-    Request(url=videos_url.format(mid='35789774', page=1), model=VideoInfo),
+    Request(url=videos_url.format(mid='35789774', page=1), callback=VideoInfo),
 ]
 snake.async_limit = 5
 

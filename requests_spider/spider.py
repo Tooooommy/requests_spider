@@ -5,11 +5,13 @@ import hashlib
 from concurrent.futures.thread import ThreadPoolExecutor
 from datetime import datetime
 from functools import partial
-from urllib.parse import urlparse
-from requests_spider.Asker import Request, Response
-from requests_spider.Logger import logger
-from requests_spider.Model import Model
-from requests_spider.Queue import Squeue
+
+from requests_spider.rule import Rule
+from requests_spider.request import Request
+from requests_spider.response import Response
+from requests_spider.logger import logger
+from requests_spider.model import Model
+from requests_spider.squeue import Squeue
 from inspect import isasyncgen, isawaitable
 from requests_html import HTMLSession
 
@@ -29,6 +31,7 @@ except AssertionError:
 _Response = Response
 _Request = Request
 _Model = Model
+_Rule = Rule
 _Queue = Squeue
 _Set = set
 
@@ -41,15 +44,12 @@ class Spider(HTMLSession):
         self.name = name
 
         self._init_requests = []
-        self._domains = []
         self._rules = []
 
         self.async_limit = 5
         self.queue_timeout = 5
         self.request_count = 0
 
-        self._init_requests_funcs = []
-        self._rule_requests_funcs = []
         self._middleware_funcs = {}
         self._queue = _Queue()
         self._visited_url = _Set()
@@ -77,35 +77,6 @@ class Spider(HTMLSession):
             self._init_requests.append(requests)
         else:
             raise TypeError('start_requests: {} is list or Request but not {} '.format(requests, type(requests)))
-
-    @property
-    def domains(self):
-        return self._domains
-
-    @domains.setter
-    def domains(self, domains):
-        """
-        set domains
-        _domains = [] if domains is None
-        """
-        if isinstance(domains, list):
-            for domain in domains:
-                domain = self._make_domain(domain)
-                self._domains.append(domain)
-        elif isinstance(domains, str):
-            domain = self._make_domain(domains)
-            self._domains.append(domain)
-        else:
-            raise TypeError('domains: {} is list or str but not {}'.format(domains, type(domains)))
-
-    @staticmethod
-    def _make_domain(domain):
-        """
-        complete domain
-        """
-        if domain.startswith('www.'):
-            domain = domain[4:]
-        return domain
 
     @property
     def rules(self):
@@ -188,32 +159,13 @@ class Spider(HTMLSession):
         """
 
         e_url = self.encode_request(req)
-        netloc = urlparse(req.url).netloc
         if e_url in self._visited_url:
-            return True
-        elif len(self._domains) > 0 and not any([netloc.endswith(domain) for domain in self._domains]):
             return True
         return False
 
     """
     Component
     """
-
-    def Init(self, func):
-        """
-        init request func
-        """
-
-        self._init_requests_funcs.append(func)
-        return func
-
-    def Rule(self, func):
-        """
-        rule request func
-        """
-
-        self._rule_requests_funcs.append(func)
-        return func
 
     def _add_middleware(self, func, option='request'):
         """
@@ -270,28 +222,8 @@ class Spider(HTMLSession):
         """
         Request initialization:  getting initialization requests from Middleware
         """
-        for requests_func in self._init_requests_funcs:
-            result = requests_func()
-            await self.async_put_item(result)
-        await self.async_put_item(self._init_requests)
-
-    async def rule(self):
-        """
-        get rule from rule_funcs
-        add rule into _rules
-        """
-        for rule_func in self._rule_requests_funcs:
-            result = rule_func()
-            if isasyncgen(result):
-                async for rule in result:
-                    self._rules.append(rule)
-            elif isawaitable(result):
-                rule = await result
-                self._rules.append(rule)
-            elif isinstance(result, _Request):
-                self._rules.append(result)
-            else:
-                logger.info('rule: {}'.format(result))
+        for request in self.init_requests:
+            await self.async_put_item(request)
 
     async def dispather(self):
         """
@@ -342,13 +274,13 @@ class Spider(HTMLSession):
                 if result:
                     await self.async_put_item(result)
 
-        model = getattr(response.current_request, 'model', None)
-        if model:
-            model = model()
-            if isinstance(model, _Model):
-                model.load(response)
-                model = model.process(response)
-            await self.async_put_item(model)
+        callback = getattr(response.current_request, 'callback', None)
+        if callback:
+            callback = callback()
+            if isinstance(callback, _Model):
+                callback.load(response)
+                callback = callback.process(response)
+            await self.async_put_item(callback)
 
         logger.info('end parser')
 
@@ -361,7 +293,6 @@ class Spider(HTMLSession):
         try:
             logger.info('run init_spider')
             self.loop.run_until_complete(self.init())
-            self.loop.run_until_complete(self.rule())
             logger.info('end init_spider')
 
             logger.info('run main_spider')
