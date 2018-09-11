@@ -1,10 +1,6 @@
 from requests_spider.const import METHOD_GET, METHOD_ALL
 from requests_spider.const import parse_url, unparse_url
 
-REQUEST_ARGS = frozenset({'params ', 'data', 'headers', 'cookies',
-                          'files', 'auth', 'timeout', 'allow_redirects', 'proxies',
-                          'hooks', 'stream', 'verify', 'cert', 'json'})
-
 
 class Request(object):
     def __init__(self, url, *,
@@ -28,7 +24,7 @@ class Request(object):
             raise ValueError('{} not in {}'.format(method, METHOD_ALL))
         self._method = method
 
-        self.__dict__.update(info)
+        self.info = info
         self.callback = callback
         self.not_filter = not_filter
         self.form_filter = form_filter
@@ -60,15 +56,3 @@ class Request(object):
         if method not in METHOD_ALL:
             raise ValueError('{} not in {}'.format(method, METHOD_ALL))
         self._method = method
-
-    @property
-    def info(self):
-        _info = {}
-        for key in REQUEST_ARGS:
-            if key in self.__dict__.keys():
-                _info.update(self.__dict__.get(key))
-        return _info
-
-
-
-
