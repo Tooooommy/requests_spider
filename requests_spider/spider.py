@@ -225,7 +225,7 @@ class Spider(HTMLSession):
         for request in self.init_requests:
             await self.async_put_item(request)
 
-    async def dispather(self):
+    async def dispather(self, task_id):
         """
         dispather: get request from queue and put into downloader
         """
@@ -233,10 +233,11 @@ class Spider(HTMLSession):
             while self.is_running:
                 try:
                     item = await asyncio.wait_for(self.get_item(), self.queue_timeout)
+                    logger.info('task_id: {} and request: {}'.format(task_id, item))
                     if isinstance(item, _Request):
                         resp = await self.downloader(item)
                         if isinstance(resp, _Response):
-                            await self.parser(resp)
+                            await asyncio.ensure_future(self.parser(resp))
                 except asyncio.TimeoutError:
                     pass
 
@@ -296,9 +297,8 @@ class Spider(HTMLSession):
             self.loop.run_until_complete(self.init())
             logger.info('end init_spider')
 
+            tasks = asyncio.wait([self.dispather(taskid) for taskid in range(self.async_limit)])
             logger.info('run main_spider')
-            tasks = asyncio.wait(
-                [self.dispather() for _ in range(self.async_limit)])
             self.loop.run_until_complete(tasks)
             logger.info('end main_spider')
 
