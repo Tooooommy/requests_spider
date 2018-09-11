@@ -12,7 +12,7 @@ from requests_spider.response import Response
 from requests_spider.logger import logger
 from requests_spider.model import Model
 from requests_spider.squeue import Squeue
-from inspect import isasyncgen, isawaitable
+from inspect import isasyncgen, isawaitable, isclass, isfunction
 from requests_html import HTMLSession
 
 try:
@@ -275,12 +275,13 @@ class Spider(HTMLSession):
                     await self.async_put_item(result)
 
         callback = getattr(response.current_request, 'callback', None)
-        if callback:
+        if isclass(callback):
             callback = callback()
-            if isinstance(callback, _Model):
-                callback.load(response)
-                callback = callback.process(response)
-            await self.async_put_item(callback)
+            callback.load(response)
+            callback = callback.process(response)
+        elif isfunction(callback):
+            callback = callback(response)
+        await self.async_put_item(callback)
 
         logger.info('end parser')
 
