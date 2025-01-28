@@ -7,7 +7,7 @@ setup(
     author="Tommy",
     long_description=open('README.md').read(),
     author_email="tooooommy@163.com",
-    url='https://github.com/Tooooomy/requests_spider',
+    url='https://github.com/Tooooommy/requests_spider',
     python_requires='>=3.6.0',
     classifiers=[
         'License :: OSI Approved :: MIT License',
